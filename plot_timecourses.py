@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 def plottimecourselist(datalist,time_vector,ax):
     '''plot each experiment plate data in different colors for that experiment'''
-    colors = ['r', 'b', 'g', 'y']  # Define colors for different readers
+    colors = ['r', 'b', 'g', 'y', 'k']  # Define colors for different readers
     for i,(num,array) in enumerate(datalist.items()):
         color=colors[i]
         for row in (datalist[i]):
