@@ -411,7 +411,7 @@ def antibiotic_crosstalk(timepoint,time_vector,conditions,od_raws,fp1_raws,fp2_r
     plt.show()
     
     #calculate alpha parameter
-    #numerators: transposed crosstalk array minus one 
+    #numerators: crosstalk array minus one 
     numerators = crossdf-1
     #denominators should be 1/(fold-1) only on the diagonal, only for intended inducer-sensor pairs
     # denominators = np.eye(len(fluors))*np.where(numerators != 0, 1 / numerators, 0) #conditional statement is added to replace inf or nan with 0 in case that a value in numerators is 0 resulting in divide by zero
@@ -437,3 +437,133 @@ def antibiotic_crosstalk(timepoint,time_vector,conditions,od_raws,fp1_raws,fp2_r
     plt.show()
 
     return alphas, fig
+
+def mixed_crosstalk_more_inputs(file_name,sensors,timepoint,fluors,input_names):
+    #import excel files
+    file=pd.ExcelFile(file_name)
+    oddf=pd.read_excel(file,0)
+    fp1df=pd.read_excel(file,1)
+    fp2df=pd.read_excel(file,2)
+    if sensors==3:
+        fp3df=pd.read_excel(file,3)
+    
+    #convert time to hours and create time vector
+    t_sec=oddf.columns[np.where(oddf.columns==0)[0][0]:].to_numpy(dtype=float)
+    t=t_sec/3600
+    timeloc=(np.abs(t-timepoint)).argmin() #finds location in time vector of that time
+    
+    #create the crosstalk dataframe of columns with sensor and input information
+    crosstalk_df=fp1df[(fp1df.Sensor=='both')|(fp1df.Sensor=='blank')].iloc[:,:len(input_names)+1]
+    #return crosstalk_df
+      
+    #make input values numeric
+    crosstalk_df[input_names] = crosstalk_df[input_names].apply(pd.to_numeric, errors='coerce')
+    
+    #select the fluorescence data starting at timeloc (with reference to the 'Time [s]' column)
+    time_col_idx = np.where(oddf.columns == 'Time [s]')[0][0] + timeloc + 1
+    #print(time_col_idx)
+    
+    crosstalk_df['fp1 raw'] = fp1df[(fp1df.Sensor=='both')|(fp1df.Sensor=='blank')].iloc[:, time_col_idx]
+    crosstalk_df['fp2 raw'] = fp2df[(fp1df.Sensor=='both')|(fp1df.Sensor=='blank')].iloc[:, time_col_idx]
+    #return fp1df
+    
+    if sensors == 3:
+        crosstalk_df['fp3 raw'] = fp3df[(fp1df.Sensor=='both')|(fp1df.Sensor=='blank')].iloc[:, time_col_idx]
+    
+    # Subtract blank mean for each fluorescence protein (generalized for any number of sensors)
+    for i in range(sensors):
+        
+        fp_col = f'fp{i+1}'
+        raw_col = f'{fp_col} raw'
+        # #subtract mean blank value for each fluorescence type, but set the value to 0 if the subtraction results in a negative 
+        # crosstalk_df[fp_col] = (crosstalk_df[raw_col] - crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col].mean()).clip(lower=0)
+
+        #for vals in crosstalk_df[raw_col]:
+            #print(vals)
+
+        #return
+        crosstalk_df[fp_col] = crosstalk_df[raw_col] - crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col].mean()
+
+        #for entry in crosstalk_df[raw_col]: 
+          #  print(entry)
+        #for entry in crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col]:
+           # print(entry)
+        #print('done')
+        #return(crosstalk_df)
+        #print(crosstalk_df[)
+    
+    # Calculate fold change for each sensor over basal expression level (0 inducers added)    
+    for i in range(sensors):
+        fp_col = f'fp{i+1}'
+        fold_col=f'fp{i+1} fold'
+        # sensor_name = sensor_names[i]
+        baseline = np.mean(crosstalk_df[fp_col][(crosstalk_df[input_names] == 0).all(axis=1)]) #& (crosstalk_df['Sensor'] == sensor_name)])
+        crosstalk_df[fold_col] = crosstalk_df[fp_col] / baseline
+    
+    # create mask to select rows that only have one inducer added
+    mask = np.logical_or.reduce([
+        (crosstalk_df[col] == crosstalk_df[col].max()) & (crosstalk_df[input_names.difference([col])] == 0).all(axis=1)
+        for col in input_names
+    ])
+    #filter crosstalk dataframe according to mask    
+    filterdf=crosstalk_df[mask]
+    
+    #initialize the empty array for crosstalk
+    cross = np.zeros((len(input_names), sensors))
+    
+    #compute mean fold values in a new array    
+    for row_idx, excluded_col in enumerate(input_names):
+        for col_idx in range(sensors):
+            fold_col=f'fp{col_idx+1} fold'
+            condition = (filterdf[input_names.difference([excluded_col])] == 0).all(axis=1) #& (filterdf["Sensor"] == sensor) 
+            cross[row_idx, col_idx] = np.mean(filterdf.loc[condition, fold_col])
+    
+    # Create DataFrame for the heatmap
+    crossdf = pd.DataFrame(cross, columns=fluors,index=input_names)
+    
+    # Set Matplotlib to keep text as text in SVG files
+    plt.rcParams['svg.fonttype'] = 'none'
+
+    # plot fold change heatmap
+    sns.set(font_scale=1.5)
+    # Create the heatmap with vmin=min value of data and vmax set to the maximum value of the heatmap (can change the max to be the same as other sensors so they are on the same scale)
+    vmax = crossdf.values.max()
+    vmin=crossdf.values.min()
+    fig,ax=plt.subplots()
+    sns.heatmap(crossdf,cmap='Blues',vmin=vmin, vmax=vmax, annot=True, linewidths=0.5, linecolor='black', fmt='.2f', ax=ax)
+    # Ensure all spines are visible
+    ax.spines['top'].set_visible(True)
+    ax.spines['right'].set_visible(True)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['left'].set_visible(True)
+    # Set spine color
+    ax.spines['top'].set_color('black')
+    ax.spines['right'].set_color('black')
+    ax.spines['bottom'].set_color('black')
+    ax.spines['left'].set_color('black')
+    plt.show()
+
+    '''calculate alpha parameter: same way that antibiotic data was calculated - finding the max fold change for that fluor and selecting that as 1 to normalize the rest to. For this case, the intended inducers should inherently be selected as they have the max fold change.'''
+    #numerators: crosstalk array minus one 
+    numerators = crossdf-1
+    #denominators should be 1/(fold-1) only on the diagonal, only for intended inducer-sensor pairs
+    denominators = np.max(np.abs(numerators),axis=0)
+    # alpha should be sensors*inputs (whereas the heatmap is inputs*sensors)
+    alphas=(numerators/denominators).T
+    
+    '''plot crosstalk matrix as actual alphas value rather than fold change value'''
+    alphasdf=pd.DataFrame(alphas.T,columns=fluors,index=input_names) 
+    fig,ax=plt.subplots()
+    sns.heatmap(alphasdf,cmap='RdBu',vmin=-1, vmax=1,  annot=True, linewidths=0.5, linecolor='black', fmt='.2f', ax=ax)
+    # Ensure all spines are visible
+    ax.spines['top'].set_visible(True)
+    ax.spines['right'].set_visible(True)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['left'].set_visible(True)
+    # Set spine color
+    ax.spines['top'].set_color('black')
+    ax.spines['right'].set_color('black')
+    ax.spines['bottom'].set_color('black')
+    ax.spines['left'].set_color('black')
+    plt.show()
+    return alphas, fig, crosstalk_df
