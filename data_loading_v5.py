@@ -86,21 +86,21 @@ def define_metadata(community,plasmid,inhibitor):
         #define sensor names listed in individual strain excel sheet
         sensor_names=['atc-mch','van-yfp'] #ensure they are in the same order as fp1 and fp2
         sensors=2
-    elif community=='ttr_ths_ph':
-        path='Data files/'
-        files= [path+'20240531 ph ths ttr.xlsx']
-        #corresponding list of readers used (for conversion)
-        readers=['nano']
+    elif community=='ttr_iptg_kan_cm_glucose':
+        path='revision files/'
+        files=[path+'1029update_doseresponse_5input3output.xlsx', path+'1029update_2025-09-24_5input3output_plate1.xlsx',path+'1029update_2025-09-24_5input3output_plate2.xlsx', path+'2025-11-19_processed_plate2_K.xlsx', path+'2025-11-19_processed_plate1_doseresponse_bigbird.xlsx'] 
+        readers=['nano', 'nano', 'bigbird', 'K', 'bigbird']
         #corresponding list of reporters used (for conversion)
-        fluors=['YFP','CFP','mCh']
-        fluor1=['YFP']
-        fluor2=['CFP']
-        fluor3=['mCh']
+        fluors=['YFP','mCh']
+        #fluor1=['YFP', 'YFP', 'YFP']#,'YFP','YFP']
+        #fluor2=['mCh', 'mCh', 'mCh']#,'mCh','mCh']
+        fluor1=['YFP', 'YFP', 'YFP', 'YFP', 'YFP']#,'YFP','YFP']
+        fluor2=['mCh', 'mCh', 'mCh', 'mCh', 'mCh']#,'mCh','mCh']
         #choose individual strain data excel file paths
         single_file=None
         #define sensor names listed in individual strain excel sheet
-        sensor_names=['ttr-yfp','ths-cfp','ph-mcherry'] #in order of fp1 and fp2
-        sensors=3
+        sensor_names=None #ensure they are in the same order as fp1 and fp2
+        sensors=2
     else:
         print('community name chosen does not have any associated metadata available')
     if sensors<3:
@@ -203,17 +203,22 @@ def process_dataframes(community, filtered_dfs,sensors):
             data_arrays[key]=data_arrays[key][:,:72]
         #create input arrays
         if input_cols is None:
-            input_cols=df.columns[df.columns.get_loc('Sensor')+1:df.columns.get_loc('Sensor')+sensors+1]
+            if community!='ttr_iptg_kan_cm_glucose':
+                input_cols=df.columns[df.columns.get_loc('Sensor')+1:df.columns.get_loc('Sensor')+sensors+1]
+            else:
+                inputs=5
+                input_cols=df.columns[df.columns.get_loc('Sensor')+1:df.columns.get_loc('Sensor')+inputs+1]
         input_arrays[key]=df[input_cols].to_numpy(dtype=float)
 
     return time_vector, data_arrays, input_arrays, input_cols
 
 
-#convert data from different plate readers to match tecan J
+#convert data from different plate readers to match J/nano depending on community 
 def convert_reader_data(readers,fluors,raw_arrays,community):
     conv_arrays={}
     conv2J = pd.read_csv("Data files/reader conversion to J params.csv") 
     conv2J_new = pd.read_csv('Data files/2024 reader conversion to J params.csv')
+    conv2nano = pd.read_csv('revision files/reader_conversion_to_nano_params.csv')
     for i,j in enumerate(readers):
         #for older 2023 files they were done on the old calibration conversion
         if ((community=='aTc_IPTG')|((community=='cuma_ohc_atc')&(i>=2))): #add |((community=='TTR_THS')&(i<2)) in perentheses for ttr/ths community if using 6/28/23 data
@@ -227,6 +232,18 @@ def convert_reader_data(readers,fluors,raw_arrays,community):
             else:
                 conv_arrays[i]=raw_arrays[i]
         #for the newer files they were done on the new calibration conversion
+        elif community=='ttr_iptg_kan_cm_glucose':
+            if j!='nano':
+                if fluors is None:
+                    measurement='OD'
+                else:
+                    measurement=fluors[i]
+                condition=conv2nano[(conv2nano['measurement'].str.contains(measurement)) & (conv2nano['measurement'].str.contains(j))]
+                conv_arrays[i]=raw_arrays[i]*(condition['b'].values[0])+(condition['c'].values[0])
+            else:
+                conv_arrays[i]=raw_arrays[i]
+            
+        
         else:
             if j!='J':
                 if fluors is None:
@@ -247,11 +264,16 @@ def subtract(community,time_vector,fp1_conv,fp2_conv,fp3_conv,sensors,input_arra
     subtracted_fp1_conv_all=np.empty((0,len(time_vector)),dtype=float)
     subtracted_fp2_conv_all=np.empty((0,len(time_vector)),dtype=float)
     subtracted_fp3_conv_all=np.empty((0,len(time_vector)),dtype=float)
-    
+
+    #modify 5 inputs community data from 9-24-25 from normal subtraction because it didn't include the condition where all inputs are 0
+    #second 2 files should use basal_row_index=3. These files are 1029update_2025-09-24_5input3output_plate1.xlsx, 1029update_2025-09-24_5input3output_plate2.xlsx
     for i, fluor in enumerate(fp1_conv):
         #subtract the basal expression condition from the data
         '''identify which row corresponds to zero inducers added'''
-        basal_row_index=np.where(np.all(input_arrays[i]==0,axis=1))[0][0]
+        if community=='ttr_iptg_kan_cm_glucose' and i in [1,2]:
+            basal_row_index=3 #this is the row where no inputs are added except the lowest concentration of kan (which should be the most minimal impact on the data/closest to all inputs being 0)
+        else:
+            basal_row_index=np.where(np.all(input_arrays[i]==0,axis=1))[0][0]
         basal_subtracted_fp1[i]=fp1_conv[i]-fp1_conv[i][basal_row_index]
         basal_subtracted_fp2[i]=fp2_conv[i]-fp2_conv[i][basal_row_index]
         if sensors>2:
@@ -287,5 +309,4 @@ def normalize(subtracted_fp1_conv_all,subtracted_fp2_conv_all,subtracted_fp3_con
         
     return normalized_fp1_conv_all, normalized_fp2_conv_all, normalized_fp3_conv_all
         
-
 
