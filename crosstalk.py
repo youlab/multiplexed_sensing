@@ -20,7 +20,7 @@ def crosstalk(single_file,sensors,timepoint,sensor_names):
     #create the crosstalk dataframe of columns with sensor and input information
     crosstalk_df=fp1df[fp1df.Sensor!='both'].iloc[:,:sensors+1] 
     
-    #define columns of dataframe that indicate the input columns (be careful later because, input_cols is something else)
+    #define columns of dataframe that indicate the input columns
     inputs_cols = crosstalk_df.columns[1:sensors+1] 
     
     #make input values numeric
@@ -132,7 +132,7 @@ def mixed_crosstalk(file_name,sensors,timepoint,fluors):
     #create the crosstalk dataframe of columns with sensor and input information
     crosstalk_df=fp1df[(fp1df.Sensor=='both')|(fp1df.Sensor=='blank')].iloc[:,:sensors+1] 
     
-    #define columns of dataframe that indicate the input columns (be careful because, input_cols is something else)
+    #define columns of dataframe that indicate the input columns
     inputs_cols = crosstalk_df.columns[1:sensors+1] 
     
     #make input values numeric
@@ -247,7 +247,7 @@ def mixed_crosstalk_simple(file_name,sensors,timepoint,fluors):
     #create the crosstalk dataframe of columns with sensor and input information
     crosstalk_df=fp1df[(fp1df.Sensor=='both')].iloc[:,:sensors+1] 
     
-    #define columns of dataframe that indicate the input columns (be careful because, input_cols is something else)
+    #define columns of dataframe that indicate the input columns
     inputs_cols = crosstalk_df.columns[1:sensors+1] 
     
     #make input values numeric
@@ -268,13 +268,6 @@ def mixed_crosstalk_simple(file_name,sensors,timepoint,fluors):
         # #subtract mean blank value for each fluorescence type, but set the value to 0 if the subtraction results in a negative 
         # crosstalk_df[fp_col] = (crosstalk_df[raw_col] - crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col].mean()).clip(lower=0)
         crosstalk_df[fp_col] = crosstalk_df[raw_col] - baseline
-
-    # # Calculate % activation for each sensor with respect to intended    
-    # for i in range(sensors):
-    #     fp_col = f'fp{i+1}'
-    #     fold_col=f'fp{i+1} fold'
-    #     # sensor_name = sensor_names[i]
-    #     crosstalk_df[fold_col] = crosstalk_df[fp_col] / baseline
     
     # create mask to select rows that only have one inducer added
     mask = np.logical_or.reduce([
@@ -351,16 +344,12 @@ def antibiotic_crosstalk(timepoint,time_vector,conditions,od_raws,fp1_raws,fp2_r
     #create the crosstalk dataframe of columns with sensor and input information
     crosstalk_df=conditions[['[A]','[I]']].apply(pd.to_numeric,errors='coerce') 
 
-    #define columns of dataframe that indicate the input columns (be careful because, input_cols is something else)
+    #define columns of dataframe that indicate the input columns
     inputs_cols=crosstalk_df.columns
     
     #select the fluorescence data starting at timeloc (with reference to the 'Time [s]' column)
     crosstalk_df['fp1 raw']=fp1_raws[0][:,timeloc]
     crosstalk_df['fp2 raw']=fp2_raws[0][:,timeloc]
-    
-    #this data doesn't have blanks so no blank subtraction is possible
-    #crosstalk_df['fp1']=crosstalk_df['fp1 raw']-(crosstalk_df[crosstalk_df['Sensor']=='blank']['fp1 raw'].mean())
-    #crosstalk_df['fp2']=crosstalk_df['fp2 raw']-(crosstalk_df[crosstalk_df['Sensor']=='blank']['fp2 raw'].mean())
 
     #calculate fold change for each fluorescent protein over 'basal expression level' (0 inducers added)
     crosstalk_df['fp1 fold']=crosstalk_df['fp1 raw']/np.mean(crosstalk_df['fp1 raw'][(crosstalk_df['[A]']==0)&(crosstalk_df['[I]']==0)])
@@ -475,22 +464,9 @@ def mixed_crosstalk_more_inputs(file_name,sensors,timepoint,fluors,input_names):
         
         fp_col = f'fp{i+1}'
         raw_col = f'{fp_col} raw'
-        # #subtract mean blank value for each fluorescence type, but set the value to 0 if the subtraction results in a negative 
-        # crosstalk_df[fp_col] = (crosstalk_df[raw_col] - crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col].mean()).clip(lower=0)
-
-        #for vals in crosstalk_df[raw_col]:
-            #print(vals)
 
         #return
         crosstalk_df[fp_col] = crosstalk_df[raw_col] - crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col].mean()
-
-        #for entry in crosstalk_df[raw_col]: 
-          #  print(entry)
-        #for entry in crosstalk_df[crosstalk_df['Sensor'] == 'blank'][raw_col]:
-           # print(entry)
-        #print('done')
-        #return(crosstalk_df)
-        #print(crosstalk_df[)
     
     # Calculate fold change for each sensor over basal expression level (0 inducers added)    
     for i in range(sensors):
