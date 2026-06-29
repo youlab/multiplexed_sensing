@@ -60,6 +60,9 @@ The goal of synthetic gene circuits is to create cells that can sense their envi
 - **final_trained_models/**: Saved model parameters
 - **parameter_files/**: Model parameters for each dataset
 - **sink water experiment analysis/**: Hospital sink water sensing data (Figure 6)
+- **revision files/**: Raw experimental data collected for 5-input, 3-output experiment (Figure S17)
+  - Time course data with OD and fluorescence measurements
+  - Plate reader conversion files for cross-calibration
 
 ### Using the Pipeline
 1. For paper datasets:
@@ -67,7 +70,7 @@ The goal of synthetic gene circuits is to create cells that can sense their envi
    - Results match paper figures (except for randomized simulations)
 2. For new datasets:
    - Format data following existing structure
-   - Modify metadata in `data_processing.py`
+   - Modify metadata in `data_loading_v5.py`
    - Adjust pipeline parameters as needed
 
 ### Note on VAE-MLP Models
